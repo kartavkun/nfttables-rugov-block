@@ -1,23 +1,21 @@
-# Keep your webserver clean from RKN bots using iptables.
+# Block RKN bots with nftables
 
-This project uses blacklists from https://github.com/C24Be/AS_Network_List/blob/main/blacklists/blacklist.txt
+This project blocks incoming IPv4 and IPv6 traffic from the [blacklist](https://github.com/C24Be/AS_Network_List/blob/main/blacklists/blacklist.txt). It uses a dedicated `inet rugov_block` nftables table and does not modify other tables.
 
-Pay attention! This script was tested on Ubuntu 22.04, there could be any issues on other versions or Linuxes!
+## Installation
 
-You can find all the original instructions from the author of this solution here: [original_instruction.pdf](original_instruction.pdf)
+On a systemd-based Debian or Ubuntu system, install `nftables`, `wget`, `python3`, and `cron`. Install `rsyslog` too if logging is desired. Clone this repository and run:
 
-## How to use
+```sh
+sudo ./install.sh
+# Or, to log blocked packets:
+sudo ./install.sh --log
+```
 
-First, check that you have all necessary packages: `sudo apt-get install iptables-persistent` and `sudo apt-get install rsyslog` if you want to keep logs.
-Clone this repo to your server and run `sudo ./install.sh`
-To enable logging of all requests from forbidden ips run `sudo ./install.sh --log` instead. This requires rsyslogd to be up and running. If you are unsure - install it without logs.
-All the logs are in the file /var/log/rugov_blacklist/blacklist.log . Keep in mind - if your target could be interesting, you can get a lot of disk space used by this log!
+The installer downloads and applies the list, schedules daily updates, and enables a systemd service to restore the last successfully applied rules at boot. Logging can generate large files; messages are written to `/var/log/rugov_blacklist/blacklist.log`.
 
-## What it does
+Updates validate the complete list and replace the table in one nftables transaction. A failed download, invalid list, or failed nft transaction leaves the active rules unchanged. The saved rules and update log are in `/var/log/rugov_blacklist/`.
 
-- adds rsyslogd rules in /etc/rsyslog.d/51-iptables-rugov.conf (only with --log)
-- makes directory /var/log/rugov_blacklist/
-- puts there all necessary files
-- runs the update process 
-- installs cron script to /etc/cron.daily/rugov_updater
+The previous iptables version may have left rules in the raw PREROUTING chains. Remove those separately when migrating; this installer does not alter existing firewall rules.
 
+The original instructions are available in [original_instruction.pdf](original_instruction.pdf).
