@@ -6,7 +6,7 @@ if [[ $# -gt 1 || ( $# -eq 1 && $1 != --log ) ]]; then echo "Usage: $0 [--log]" 
 for cmd in nft wget python3 systemctl; do
     command -v "$cmd" >/dev/null || { echo "Missing dependency: $cmd" >&2; exit 1; }
 done
-mkdir -p /var/log/rugov_blacklist /etc/cron.daily
+mkdir -p /var/log/rugov_blacklist
 install -m 755 "$DIR/updater.sh" /var/log/rugov_blacklist/updater.sh
 if [[ ${1:-} == --log ]]; then
     [[ -d /etc/rsyslog.d ]] || { echo 'Install rsyslog first.' >&2; exit 1; }
@@ -32,16 +32,34 @@ RemainAfterExit=yes
 [Install]
 WantedBy=multi-user.target
 UNIT
-cat > /etc/cron.daily/rugov_updater <<'CRON'
-#!/bin/sh
-. /var/log/rugov_blacklist/config
-export RUGOV_LOG
-exec /var/log/rugov_blacklist/updater.sh
-CRON
-chmod 755 /etc/cron.daily/rugov_updater
+cat > /etc/systemd/system/rugov-update.service <<'UNIT'
+[Unit]
+Description=Update RUGOV nftables blacklist
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+EnvironmentFile=/var/log/rugov_blacklist/config
+ExecStart=/var/log/rugov_blacklist/updater.sh
+UNIT
+cat > /etc/systemd/system/rugov-update.timer <<'UNIT'
+[Unit]
+Description=Update RUGOV blacklist daily
+
+[Timer]
+OnCalendar=daily
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+UNIT
 . /var/log/rugov_blacklist/config
 export RUGOV_LOG
 /var/log/rugov_blacklist/updater.sh
 systemctl daemon-reload
 systemctl enable rugov-nftables.service
+systemctl enable --now rugov-update.timer
+# Remove the cron job installed by earlier versions.
+rm -f /etc/cron.daily/rugov_updater
 echo 'Installation finished successfully.'
